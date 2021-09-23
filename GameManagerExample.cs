@@ -20,10 +20,31 @@ namespace NB
         /// </summary>
         SceneManager sceneManager;
 
+        #region State Machine Functions
         /// <summary>
-        /// The game state machine
+        /// The load scene state machine
         /// </summary>
-        StateMachine gameStateMachine = new StateMachine();
+        StateMachine sceneLoadStateMachine;
+
+        /// <summary>
+        /// Names of the scene load states
+        /// </summary>
+        private const string StateSceneLoadIdle = "State Idle";
+        private const string StateLoadScene = "State Load Scene";
+
+        /// <summary>
+        /// the game play state machine
+        /// </summary>
+        StateMachine gamePlayStateMachine;
+
+        /// <summary>
+        /// Names of the game play states
+        /// </summary>
+        private const string StateGameIdle = "State Idle";
+        private const string StatePlayGame = "Play Game State";
+        private const string StatePauseGame = "Pause Game State";
+
+        #endregion State Machine Functions
 
         #region Loading State Variables
 
@@ -31,120 +52,157 @@ namespace NB
 
         public GameObject loadingScreen;
 
+        private string sceneName;
+
         #endregion Loading State Variables
+
+        #region Game State Variables
+
+        public GameObject playingMenu;
+
+        public GameObject pauseMenu;
+
+        #endregion Game State Variables
 
         void Start()
         {
             DontDestroyOnLoad(this.gameObject);
 
-            gameStateMachine.ChangeState(new LoadSceneState(this, "Scene1"));
+            List<NBState> states = new List<NBState>();
+
+            //All Callbacks set to null means this state never runs functions, perfect for idling a statemachine
+            states.Add(new NBState(null, null, null, StateSceneLoadIdle));
+            
+            states.Add(new NBState(EnterLoadScene, ExecuteLoadScene, ExitLoadScene, StateLoadScene));
+
+            sceneLoadStateMachine = new StateMachine("Scene Load State Machine", states);
+
+            sceneLoadStateMachine.GoToState(StateSceneLoadIdle);
+
+            states.Clear();
+
+            states.Add(new NBState(null, null, null, StateGameIdle));
+
+            states.Add(new NBState(EnterGamePlay, ExecuteGamePlay, ExitGamePlay, StatePlayGame));
+            //Any Callback can be left null as well without issue
+            states.Add(new NBState(EnterGamePause, null, ExitGamePause, StatePauseGame));
+
+            gamePlayStateMachine = new StateMachine("Game State Machine", states);
+
+            gamePlayStateMachine.GoToState(StateGameIdle);
+
+            states.Clear();
         }
 
         private void Update()
         {
-            gameStateMachine.Update();
+            sceneLoadStateMachine.StateMachineUpdate();
+
+            gamePlayStateMachine.StateMachineUpdate();
         }
 
-        #region Loading State Functions
-        public void ShowLoadingScreen()
+        #region State Machine Functions
+        private void EnterLoadScene()
         {
+            Debug.Log("Enter loading scene state");
+
             loadingScreen.SetActive(true);
+
+            LoadNewScene(sceneName);
         }
 
-        public void LoadNewScene(string sceneName)
+        private void ExecuteLoadScene()
+        {
+            Debug.Log("Execute loading scene state");
+
+            if (asyncLoad.isDone)
+            {
+                StartGamePlay();
+
+                sceneLoadStateMachine.GoToState(StateSceneLoadIdle);
+            }
+        }
+
+        private void ExitLoadScene()
+        {
+            Debug.Log("Exit loading scene state");
+
+            loadingScreen.SetActive(false);
+        }
+
+        private void EnterGamePlay()
+        {
+            Debug.Log("Enter play game state");
+
+            playingMenu.SetActive(true);
+        }
+
+        private void ExecuteGamePlay()
+        {
+            Debug.Log("Execute play game state");
+
+            //Control game play state things here
+            //Can keep track of score and timer here, for example
+        }
+
+        private void ExitGamePlay()
+        {
+            Debug.Log("Exit play game state");
+
+            playingMenu.SetActive(false);
+        }
+
+        private void EnterGamePause()
+        {
+            Debug.Log("Enter pause game state");
+
+            pauseMenu.SetActive(true);
+        }
+
+        private void ExitGamePause()
+        {
+            Debug.Log("Exit pause game state");
+
+            pauseMenu.SetActive(false);
+        }
+
+        #endregion State Machine Functions
+
+        #region Scene Loading Functions
+
+        /// <summary>
+        /// Starts a new scene loading as additive to the main scene
+        /// </summary>
+        /// <param name="sceneName"> The name of the scene to be loaded </param>
+        private void LoadNewScene(string sceneName)
         {
             asyncLoad = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
         }
 
-        public bool CheckSceneLoaded()
-        {
-            return asyncLoad.isDone;
-        }
+        #endregion Scene Loading Functions
 
-        public void HideLoadingScreen()
-        {
-            loadingScreen.SetActive(false);
-        }
-
-        #endregion Loading State Functions
-
-        #region Run Scene State Functions
+        #region Game Play Functions
         public void StartGamePlay()
         {
-            gameStateMachine.ChangeState(new RunSceneState(this));
+            gamePlayStateMachine.GoToState(StatePlayGame);
         }
 
-        #endregion Run Scene State Functions
-    }
-
-    /// <summary>
-    /// Example script for loading a scene through a state machine
-    /// </summary>
-    public class LoadSceneState : NBIState
-    {
-        GameManagerExample owner;
-
-        string sceneName;
-
-        public LoadSceneState(GameManagerExample owner, string sceneName)
+        /// <summary>
+        /// Called by a button event
+        /// </summary>
+        public void PauseButtonPressed()
         {
-            this.owner = owner;
-
-            this.sceneName = sceneName;
+            gamePlayStateMachine.GoToState(StatePauseGame);
         }
 
-        public void Enter()
+        /// <summary>
+        /// Called by a button event
+        /// </summary>
+        public void ContinueButtonPressed()
         {
-            Debug.Log("Enter loading scene state");
-
-            owner.ShowLoadingScreen();
-
-            owner.LoadNewScene(sceneName);
+            gamePlayStateMachine.GoToState(StatePlayGame);
         }
 
-        public void Execute()
-        {
-            Debug.Log("Execute loading scene state");
-
-            if (owner.CheckSceneLoaded())
-            {
-                owner.StartGamePlay();
-            }
-        }
-
-        public void Exit()
-        {
-            Debug.Log("Exit loading scene state");
-
-            owner.HideLoadingScreen();
-        }
-    }
-
-    /// <summary>
-    /// Example script for running scene gameplay through a state machine
-    /// </summary>
-    public class RunSceneState : NBIState
-    {
-        GameManagerExample owner;
-
-        public RunSceneState(GameManagerExample owner)
-        {
-            this.owner = owner;
-        }
-
-        public void Enter()
-        {
-            Debug.Log("Enter run scene state");
-        }
-
-        public void Execute()
-        {
-            Debug.Log("Execute run scene state");
-        }
-
-        public void Exit()
-        {
-            Debug.Log("Exit run scene state");
-        }
+        #endregion Game Play Functions
     }
 }
